@@ -1,0 +1,310 @@
+
+5.单击添加笔记本按钮进行添加
+	客户端：
+		发送请求：提交数据：bookname, bookId
+		回调函数：成功，关闭对话框，添加笔记本li
+				  失败，提示失败信息
+				  
+	edit.html中：
+		见4中的edit.html
+	
+				  
+				  
+				  
+	服务器端：
+		/notebook/add.do
+		DispatcherServlet
+		HandlerMapping
+		AddNoteBookController.execute
+		NoteBookService
+		NoteBookDao --cn_notebook
+		返回NoteResult结构的json
+		
+		<insert id="save" parameterType="org.entity.NoteBook" >
+		insert into cn_notebook (cn_notebook_id,...) values (#{cn_notebook_id},...)
+		</insert>
+		
+		NoteBookDao:
+			public void save(NoteBook book);
+		
+		NoteBookServiceImpl:
+			public NoteResult addBook(String bookName,String userId){
+				NoteResult result = new NoteResult();
+				NoteBook book = new NoteBook();
+				book.setCn_bookname(bookname);
+				book.setCn_user_id(userId);
+				String noteId = NoteUtil.getUid();
+				book.setCn_notebook_id(noteId);
+				Timestemp time = new Timestemp(System.currentTimeMillions());
+				book.setCn_notebook_createTime(time);
+				result.setStatus(0);
+				result.setMsg("创建成功");
+				result.setData(noteId);
+				return result;
+			}
+
+
+
+4、笔记列表显示：
+	客户端：
+		发送请求：单击笔记本列表li发送请求
+			提交数据：li中隐藏的booksId
+		回调函数：解析服务器端返回的json，显示笔记列表
+		
+	服务器端：
+		/note/loadnotes.do
+		DispatcherServlet
+		HandlerMapping
+		LoadNotesController.execute
+		NotesService
+		NotesDao  --cn_note
+		返回NoteResult结构的json
+
+	select * from cn_note where cn_notebook_id = #{bookId} order by cn_note_create_time desc
+		
+	NoteDao:
+		public List<Map> findByBookId(String bookId);
+		
+	NotesService:
+		@Service
+		public class NotesServiceImpl implements NotesService(){
+			@Resource
+			private NotesDao notesDao;
+			
+			public NoteResult loadNotes(String bookId){
+				List<Map> notesList = notesDao.findByBookId();
+				NoteResult result = new NoteResult();
+				result.setStatus(0);
+				result.setMsg("查询笔记成功");
+				result.setData(notesList);
+				return result;
+			}
+		}
+		
+		
+	notes.js:
+		function closeWindow(){
+				$("#can").empty();  //将can div中加载的alert页面清空
+				$(".opacity_bg").hide();  //将黑幕隐藏
+		}
+	
+	
+		function loadnotes(){
+				$("#note_list li a").removeClass("check");
+				$(this).find("a").addClass("check");
+			
+				//获取notebooks中bookId
+				var bookId = $(this).data("bookId");
+						
+				$.ajax({
+					url:"http://localhost:8080/cloud_note/note/loadnotes.do",
+					type:"post",
+					data:{"bookId",bookId},
+					success:funciton(result){
+						if(result.status==0){
+							//获取notes的data
+							var notes = result.data;
+							for(var i = 0;i<notes.length;i++){
+								var noteId = notes[i].cn_note_id;
+								var noteTitle = notes[i].cn_note_title;
+								//拼接li
+								var s_li = "<li>.'+noteTitle+'..</li>";
+								var $li = $(s_li);
+								$li.data("noteId",noteId);
+								$("#note_list").append($li);
+							}
+						}	
+					}
+				});			
+			}
+			
+		}
+		
+		
+	edit.html中notes列表：
+		$(function(){
+			//页面进入接着加载笔记本列表
+			loadNoteBooks();
+			//点击笔记本加载笔记(动态绑定事件处理，给未来或现有匹配的元素绑定事件)
+			$("#book_list").on("click","li",loadnotes);
+			//给添加笔记本按钮绑定事件事件
+			$("#add_notebook").click(function(){	
+				$(".opacity_bg").show();  //黑幕显示
+				$("#can").load("alert/alert_notebook.html");  //加载新建笔记本对话框				
+			});		
+			//关闭对话框
+			$("#can").on("click",".cancle,.close",closeWindow);
+			//创建笔记本处理
+			$("#can").on("click","#sure_addbook",function(){
+				var bookname = $("新建笔记本框").val().trim();
+				//检查笔记本是否为空
+				//发送请求
+				$.ajax(function(){
+					url:"http://localhost:8080/cloud_note/notebook/add.do",
+					type:"post",
+					data:{"bookname":bookname,"userId":userId},
+					dataType:"json",
+					success:function(result){
+						if(result.status==0){
+							closeWindow();
+							var noteId = result.data;
+							
+							//动态拼接li
+							var s_li = '<li>...</li>';
+							//将s_li转成jQuery对象，在$li中藏值
+							var $li = $(s_li);
+							$li.data("noteId",noteId);
+							$("#book_list").prepend($li);  //book_list为降序排列，因此加到最前边
+						}
+					}
+				});
+			});
+		});	
+		
+		
+		
+		
+		
+		
+
+3、笔记本列表显示：
+	登录成功，一进入就显示edit.html页面，就显示该用户名下的笔记本列表
+	
+	客户端：
+		发送请求：页面加载时就要自动发送请求，加载笔记本列表
+			$(function(){
+				
+			})
+			提交数据：userId,同过这个userId来显示该用户下的笔记本列表
+			
+		回调函数：解析json数据，显示笔记本列表(在html中循环生成li)
+		
+		注：事件绑定--动态绑定(能给现有或未来的元素绑定事件)
+			
+			   jQuery对象.on("事件类型","选择器",funciton)
+			例如：$("#book_list li").on("click","li",function(){
+				alert();
+			});		
+	服务端：
+		/notebook/loadbooks.do
+		DispatcherServlet
+		HandlerMapping
+		LoadBooksController.execute
+		NoteBookService
+		NoteBookDao --cn_notebook
+		返回NoteResult结构的json
+		
+		
+		edit.html中：
+		<script type="text/javascript" src="script/jquery.min.js">
+			//获取cookie中的userId
+			var userId = getCookie("userId");
+			if(userId == null){
+				window.location.href="log_in.html";
+			}
+			//加载笔记本列表
+			$(funciton(){  
+				$.ajax(function(){
+					url:"http://localhost:8080/cloud_note/notebook/loadbooks.do",
+					type:"post",
+					data:{"userId",userId},
+					dataType:"json",
+					success:function(result){
+						if(result.status == 0){
+							var books = result.data;
+							for(var i=0;i<books.length;i++){
+								//获取每个笔记本的名字
+								var bookName = books[i].cn_notebook_name;
+								//获取每个笔记本的id(通过它来获取相应的笔记列表)
+								var bookId = book{i}.cn_notebook_id;
+								//动态拼接li
+								var s_li = '<li>...</li>';
+								//将s_li转成jQuery对象，在$li中藏值
+								var $li = $(s_li);
+								$li.data("bookId",bookId);
+								$("#book_list").append($li);
+							}
+						}
+					}
+				});
+			})
+		</script> 
+		
+
+2、注册：
+	客户端：
+		发送请求：数据提交：用户名、密码、昵称
+		调用函数：成功返回登录页；
+				失败发送错误信息；
+ 
+	服务端：
+		/cloud_note/user/regist.do
+		DispatcherServlet
+		HandlerMapping
+		RegistController.execute
+		RegistService
+		UserDao --cloud_user(插入) 
+	 
+
+
+$(function(){
+	#("#regist_button").click(function(){
+		//清除原有提示信息
+		$("#regist_username").html();
+		$("#nickname").html();
+		$("#regist_password").html();
+		$("#final_password").html();
+		//获取表单信息
+		var name = $("#regist_username").val().trim();
+		var nick = $("#nickname").val().trim();
+		var password = $("#regist_password").val().trim();
+		var final_password = $("#final_password").val().trim();
+		//检测表单信息格式
+		if(name ==null || name.equals("")){
+			$("#warning_1 span").html("用户名不能为空");
+			$("#warning_1").show();
+		}if(nickname ==null || nickname.equals("")){
+			//$("#warning_1 span").html("用户名不能为空");
+			//$("#warning_1").show();
+		}
+		var npassword = $("#regist_password").value.length();
+		if(npassword>6 || npassword<0){
+			alert("密码长度为0—6位")
+		}
+		if(password.equals("final_password"){
+			alert("密码一致");
+		}else{
+			alert("密码不一致");
+		}
+		//发送ajax请求
+		$.ajax({
+			url:"http://localhost:8080/cloud_note/user/regist.do",
+			type:"post",
+			data:{"name":name,"password":password,"nickname":nick},
+			dataType:"json",
+			success:function(result){
+				if(result.status==0){
+					$("#back").click(); //(无参为触发)触发返回按钮单击
+				}else if(result.status==1){
+					$("#warning_1 span").html("用户名已存在");
+					$("#warning_1").show();
+				}
+			}
+		});
+	});
+});
+
+
+1、登录：
+	客户端：
+		发送请求：用户名、密码
+		回调函数：成功页面跳转到/edit.html；
+				失败发送错误信息；
+	服务端：
+		DispatcherServlet
+		HandlerMapping
+		LoginController.execute
+		LoginService
+		UserDao  --cloud_note
+		
+		
